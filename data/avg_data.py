@@ -20,13 +20,20 @@ for i in range(1, 18):
     start = (df.index.floor("min") - pd.to_timedelta(df.index.minute % 10, "minute"))[0]
     df_avg = df.resample("10min", origin=start).mean()
     df_avg['LocationCode'] = df_avg['LocationCode'].ffill()
+    
 
     # 5 folds split
     tscv = TimeSeriesSplit(n_splits=5)
     for j, (train_index, test_index) in enumerate(tscv.split(df_avg)):
         train = df_avg[df_avg.reset_index().index.isin(train_index)]
-        test = df_avg[df_avg.reset_index().index.isin(train_index)]
+        test = df_avg[df_avg.reset_index().index.isin(test_index)]
 
         # os.makedirs(data_dir + "/avg_data_10min/loc_{i}/fold_{j}".format(j=j, i=i))
         train.to_csv(data_dir + "/avg_data_10min/loc_{i}/fold_{j}/train.csv".format(j=j, i=i))
-        train.to_csv(data_dir + "/avg_data_10min/loc_{i}/fold_{j}/test.csv".format(j=j, i=i))
+        test.to_csv(data_dir + "/avg_data_10min/loc_{i}/fold_{j}/test.csv".format(j=j, i=i))
+
+        # os.makedirs(data_dir + "/avg_data_10min/all_location/fold_{j}".format(j=j, i=i))
+        train_path = "/avg_data_10min/all_location/fold_{j}/train.csv".format(j=j)
+        test_path = "/avg_data_10min/all_location/fold_{j}/test.csv".format(j=j)
+        train.to_csv(data_dir + train_path, mode='a', header=not os.path.exists(train_path))
+        test.to_csv(data_dir + test_path, mode='a', header=not os.path.exists(test_path))
