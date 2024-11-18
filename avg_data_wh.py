@@ -132,6 +132,7 @@ def add_features(features_df):
 
 
 if __name__ == "__main__":
+    to_predict = pd.read_csv(data_dir + "/data/to_predict.csv")
     for i in range(1, 18):
         df = pd.read_csv(data_dir + "/data/avg_10min/loc_{i}.csv".format(i=i), index_col="DateTime", parse_dates=["DateTime"])
         features = df.columns[2:]
@@ -139,6 +140,10 @@ if __name__ == "__main__":
         added_features.index = df.index
 
         new_df = pd.concat([df, added_features], axis=1)
+        new_df['to_predict'] = np.where(new_df['Serial'].astype(str).isin(to_predict.astype(str).values.reshape(1, -1)[0]), 1, 0)
+        third_col = new_df.pop('to_predict')
+        new_df.insert(2, 'to_predict', third_col)
+
         new_df.to_csv(data_dir + "/data/add_lag_diff/loc_{i}.csv".format(i=i))
 
         
