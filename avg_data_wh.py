@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 from sklearn.model_selection import TimeSeriesSplit
+from statsmodels.tsa.seasonal import STL
 
 data_dir = os.getcwd()
 
@@ -36,7 +37,9 @@ def avg_data(i):
     filtered_df = df_avg[(hour_dt >= pd.to_datetime("07:00").time()) & 
                         (hour_dt < pd.to_datetime("17:00").time())]
 
-    filtered_df.to_csv(data_dir + "/data/avg_10min/loc_{i}.csv".format(i=i))
+    return filtered_df
+
+    # filtered_df.to_csv(data_dir + "/data/avg_10min/loc_{i}.csv".format(i=i))
     # 5 folds split by days
     # date_dt = filtered_df.index.date
     # unique_data = pd.Series(date_dt).unique()
@@ -58,6 +61,37 @@ def avg_data(i):
     #     test_path = "/avg_data_10min_wh/all_location/fold_{j}/test.csv".format(j=j)
     #     train.to_csv(data_dir + train_path, mode='a', header=False)
     #     test.to_csv(data_dir + test_path, mode='a', header=False)
+
+
+def test_data(i):
+    print(i)
+    df1 = pd.read_csv(data_dir + "/data/36_TrainingData/L{i}_Train.csv".format(i=i),
+                    index_col="DateTime", parse_dates=["DateTime"])
+    df2 = pd.read_csv(data_dir + "/data/36_TrainingData/L{i}_Train_2.csv".format(i=i),
+                    index_col="DateTime", parse_dates=["DateTime"])
+    df = pd.concat([df1, df2])
+
+    # 10 minute interval
+    start = (df.index.floor("min") - pd.to_timedelta(df.index.minute % 10, "minute"))[0]
+    df_avg = df.resample("10min", origin=start).mean()
+    df_avg['LocationCode'] = df_avg['LocationCode'].ffill()
+    df_avg['Serial'] = df_avg.index.strftime('%Y%m%d%H%M')
+    df_avg['Serial'] = df_avg['Serial'] + df_avg['LocationCode'].astype(int).astype(str).str.zfill(2)
+    second_col = df_avg.pop('Serial')
+    df_avg.insert(1, 'Serial', second_col)
+
+
+    # Filter 7am to 5pm
+    hour_dt = df_avg.index.time
+    incomplete_df = df_avg[(hour_dt >= pd.to_datetime("07:00").time()) & 
+                        (hour_dt < pd.to_datetime("09:00").time())]
+    filtered_df = df_avg[(hour_dt >= pd.to_datetime("09:00").time()) & 
+                        (hour_dt < pd.to_datetime("17:00").time())]
+    
+    incomplete_df = incomplete_df.dropna()
+    filtered_df = filtered_df.dropna()
+
+    return incomplete_df, filtered_df
 
 
 def differencing(series, lag):
@@ -130,9 +164,18 @@ def add_features(features_df):
 
     return added_features_df
 
+def time_decompose(data_col, period, season):
+    stl = STL(data_col.fillna(data_col.mean()), period=period, seasonal=season)
+    res = stl.fit()
+    seasonal_component = res.seasonal
+    col_deseason = data_col - seasonal_component
+
+    return col_deseason, seasonal_component
+
 
 if __name__ == "__main__":
     to_predict = pd.read_csv(data_dir + "/data/to_predict.csv")
+    features = ['WindSpeed(m/s)', 'Pressure(hpa)', 'Temperature(°C)', 'Humidity(%)', 'Sunlight(Lux)', 'Power(mW)']
     for i in range(1, 18):
         df = pd.read_csv(data_dir + "/data/avg_10min/loc_{i}.csv".format(i=i), index_col="DateTime", parse_dates=["DateTime"])
         features = df.columns[2:]
@@ -144,6 +187,13 @@ if __name__ == "__main__":
         third_col = new_df.pop('to_predict')
         new_df.insert(2, 'to_predict', third_col)
 
+        for feat in features:
+            new_df[f'{feat}_deseason'], new_df[f'{feat}_season_comp'] = time_decompose(new_df[feat], 60*30, 61)
+
         new_df.to_csv(data_dir + "/data/add_lag_diff/loc_{i}.csv".format(i=i))
+        
+        # incomplete_df, filtered_df = test_data(i)
+        # incomplete_df.to_csv(data_dir + "/data/test_data/avg_data_incomplete/avg_data_incomplete_{i}.csv".format(i=i))
+        # filtered_df.to_csv(data_dir + "/data/test_data/avg_data/avg_data_{i}.csv".format(i=i))
 
         
